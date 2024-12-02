@@ -22,7 +22,7 @@ public class FitnessCalculatorTests
             // 3. Create a chromosome with room conflicts
             var roomConflictChromosome = CreateRoomConflictChromosome(testData);
 
-            var calculator = new BasicFitnessCalculator();
+            var calculator = new FitnessCalculator();
 
             // Test and print results
             Console.WriteLine("\nTesting different chromosome configurations:");

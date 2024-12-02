@@ -25,7 +25,7 @@ public class GeneticAlgorithmTests
             }
 
             // Calculate and print fitness
-            var fitnessCalculator = new BasicFitnessCalculator();
+            var fitnessCalculator = new FitnessCalculator();
             chromosome.CalculateFitness(fitnessCalculator);
 
             PrintChromosomeDetails(chromosome);
@@ -228,7 +228,7 @@ public class GeneticAlgorithmTests
             chromosome.Genes.Add(new Gene(course, selectedTimeSlot, selectedRoom));
         }
         
-        var fitnessCalculator = new BasicFitnessCalculator();
+        var fitnessCalculator = new FitnessCalculator();
         chromosome.CalculateFitness(fitnessCalculator);
         return chromosome;
     }

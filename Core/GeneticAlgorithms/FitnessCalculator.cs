@@ -3,11 +3,11 @@ using UMAT_GEN_TTS.Core.Constraints;
 
 namespace UMAT_GEN_TTS.Core.GeneticAlgorithms;
 
-public class BasicFitnessCalculator : IFitnessCalculator
+public class FitnessCalculator : IFitnessCalculator
 {
     private readonly ConstraintManager _constraintManager;
 
-    public BasicFitnessCalculator()
+    public FitnessCalculator()
     {
         _constraintManager = new ConstraintManager();
     }

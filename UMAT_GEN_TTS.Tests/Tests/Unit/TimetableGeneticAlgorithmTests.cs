@@ -15,7 +15,7 @@ public class TimetableGeneticAlgorithmTests
 
             // 2. Initialize genetic algorithm components
             var ga = new TimetableGeneticAlgorithm(
-                new BasicFitnessCalculator(),
+                new FitnessCalculator(),
                 new RouletteWheelSelection(),
                 new SinglePointCrossover(),
                 new RandomMutation(0.1),  // 10% mutation rate

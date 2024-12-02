@@ -1,4 +1,5 @@
 using UMAT_GEN_TTS.Core.GeneticAlgorithms;
+using UMAT_GEN_TTS.Core.Models;
 
 namespace UMAT_GEN_TTS.Tests.Unit;
 
@@ -39,7 +40,7 @@ public class SelectionTests
         // Create 4 different chromosomes with varying fitness
         for (int i = 0; i < 4; i++)
         {
-            var chromosome = GeneticAlgorithmTests.CreateAndValidateChromosome(
+            var chromosome = CreateValidChromosome(
                 testData.Courses, 
                 testData.Rooms, 
                 testData.TimeSlots
@@ -60,9 +61,57 @@ public class SelectionTests
             Console.WriteLine($"Chromosome Fitness: {chromosome.Fitness}");
             foreach (var gene in chromosome.Genes)
             {
-                Console.WriteLine($"- Course: {gene.Course.Code} | Room: {gene.Room.Name} | Time: {gene.TimeSlot.Day} {gene.TimeSlot.StartTime}");
+                var roomInfo = gene.Course.Mode == CourseMode.Virtual
+                    ? "(virtual - no room)"
+                    : $"Room: {gene.Room?.Name ?? "UNASSIGNED"}";
+
+                Console.WriteLine(
+                    $"- Course: {gene.Course.Code} ({gene.Course.Mode}) | " +
+                    $"{roomInfo} | " +
+                    $"Time: {gene.TimeSlot.Day} {gene.TimeSlot.StartTime}");
             }
             Console.WriteLine();
         }
+    }
+
+    private static Chromosome CreateValidChromosome(
+        List<Course> courses, 
+        List<Room> rooms, 
+        List<TimeSlot> timeSlots)
+    {
+        var chromosome = new Chromosome();
+        var usedTimeSlots = new HashSet<TimeSlot>();
+
+        foreach (var course in courses)
+        {
+            // Find an available time slot
+            var availableSlot = timeSlots.First(ts => !usedTimeSlots.Contains(ts));
+            usedTimeSlots.Add(availableSlot);
+
+            // Handle virtual courses
+            if (course.Mode == CourseMode.Virtual)
+            {
+                chromosome.Genes.Add(new Gene(course, availableSlot, null));
+                continue;
+            }
+
+            // For non-virtual courses, find a suitable room
+            var suitableRooms = rooms.Where(r =>
+                r.Capacity >= course.StudentCount &&
+                (!course.RequiresLab || r.IsLab))
+                .ToList();
+
+            if (!suitableRooms.Any())
+            {
+                throw new InvalidOperationException(
+                    $"No suitable room found for course {course.Code} " +
+                    $"(Students: {course.StudentCount}, Lab Required: {course.RequiresLab})");
+            }
+
+            var selectedRoom = suitableRooms.First();
+            chromosome.Genes.Add(new Gene(course, availableSlot, selectedRoom));
+        }
+
+        return chromosome;
     }
 } 

@@ -1,3 +1,22 @@
+## Current Status
+- [ ] Core Genetic Algorithm (WIP)
+  - [x] Constraint System
+  - [x] Fitness Calculator
+  - [x] Mutation
+  - [x] Selection
+  - [x] Crossover
+- [ ] Timetable Genetic Algorithm (WIP)
+- [ ] Constraints
+    - [ ] Hard Constraints (WIP)
+      - [x] Course Mode Suitability
+      - [x] Room Efficiency
+      - [x] Time Preference
+      - [x] Lab Requirement
+    - [ ] Soft Constraints (WIP)
+      - [x] Lab Preference
+      - [x] Room Utilization
+      - [x] Time Slot Utilization
+
 ## Test results
 
 test data is random, basically AI generated `test_data`. To test the implementations 

@@ -140,31 +140,87 @@ namespace UMAT_GEN_TTS.Core.GeneticAlgorithms
         {
             var chromosome = new Chromosome();
             
-            // Sort courses by constraints (lab courses first, then by student count)
+            // Sort courses by constraints (most constrained first):
             var sortedCourses = _courses
-                .OrderByDescending(c => c.RequiresLab)
-                .ThenByDescending(c => c.StudentCount)
+                .OrderByDescending(c => c.ProgrammeYears.Count)  // Multi-programme courses first
+                .ThenByDescending(c => c.RequiresLab)           // Lab courses second
+                .ThenByDescending(c => c.StudentCount)          // Larger classes third
+                .ThenByDescending(c => c.CreditHours)           // Higher credit hours fourth
                 .ToList();
             
             foreach (var course in sortedCourses)
             {
-                // Find suitable room based on new rules
-                var selectedRoom = FindSuitableRoom(course, _rooms);
-                
-                // Find available time slot
-                var availableSlot = _timeSlots
-                    .FirstOrDefault(ts => !chromosome.Genes
-                        .Any(g => g.TimeSlot.Overlaps(ts) && 
-                                 (g.Room == selectedRoom || // Same room
-                                  course.HasProgrammeConflict(g.Course)))); // Same programme
+                // Find available time slots (no conflicts)
+                var availableSlots = _timeSlots
+                    .Where(ts => !HasTimeConflict(chromosome, course, ts))
+                    .ToList();
 
-                // If no slot found, take any non-conflicting slot
-                availableSlot ??= _timeSlots.First();
+                // If no conflict-free slots, find least conflicting slot
+                TimeSlot selectedSlot;
+                if (!availableSlots.Any())
+                {
+                    selectedSlot = FindLeastConflictingSlot(chromosome, course, _timeSlots);
+                    Console.WriteLine($"Warning: Had to use conflicting slot for {course.Code}");
+                }
+                else
+                {
+                    selectedSlot = availableSlots[Random.Shared.Next(availableSlots.Count)];
+                }
 
-                chromosome.Genes.Add(new Gene(course, availableSlot, selectedRoom));
+                // Find suitable room
+                var selectedRoom = course.Mode != CourseMode.Virtual 
+                    ? FindSuitableRoom(course, _rooms)
+                    : null;
+
+                chromosome.Genes.Add(new Gene(course, selectedSlot, selectedRoom));
             }
 
             return chromosome;
+        }
+
+        private bool HasTimeConflict(Chromosome chromosome, Course newCourse, TimeSlot timeSlot)
+        {
+            return chromosome.Genes.Any(g => 
+                g.TimeSlot.Overlaps(timeSlot) && (
+                    // Same lecturer
+                    g.Course.LecturerId == newCourse.LecturerId ||
+                    // Same programme year
+                    g.Course.HasProgrammeConflict(newCourse) ||
+                    // Same room (if not virtual)
+                    (newCourse.Mode != CourseMode.Virtual && 
+                     g.Room != null && 
+                     g.Room == FindSuitableRoom(newCourse, _rooms))
+                )
+            );
+        }
+
+        private TimeSlot FindLeastConflictingSlot(Chromosome chromosome, Course course, List<TimeSlot> slots)
+        {
+            return slots
+                .OrderBy(ts => CountConflicts(chromosome, course, ts))
+                .First();
+        }
+
+        private int CountConflicts(Chromosome chromosome, Course course, TimeSlot slot)
+        {
+            var conflicts = 0;
+            foreach (var gene in chromosome.Genes.Where(g => g.TimeSlot.Overlaps(slot)))
+            {
+                // Lecturer conflict (highest priority)
+                if (gene.Course.LecturerId == course.LecturerId)
+                    conflicts += 100;
+
+                // Programme year conflict (high priority)
+                if (gene.Course.HasProgrammeConflict(course))
+                    conflicts += 50;
+
+                // Room conflict (medium priority)
+                if (course.Mode != CourseMode.Virtual && 
+                    gene.Room != null && 
+                    gene.Room == FindSuitableRoom(course, _rooms))
+                    conflicts += 25;
+            }
+            return conflicts;
         }
     }
 }

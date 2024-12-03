@@ -193,4 +193,52 @@ public class CourseModeSuitabilityConstraint : IConstraint
 
         return $"Course mode violations: {string.Join(", ", virtualWithRoom.Concat(physicalNoRoom))}";
     }
+}
+
+public class LecturerConflictConstraint : IConstraint
+{
+    public const double PENALTY = 0.2;
+
+    public double EvaluatePenalty(Chromosome chromosome)
+    {
+        var conflicts = 0;
+        var genes = chromosome.Genes;
+
+        for (int i = 0; i < genes.Count; i++)
+        {
+            for (int j = i + 1; j < genes.Count; j++)
+            {
+                if (genes[i].Course.LecturerId == genes[j].Course.LecturerId && 
+                    !string.IsNullOrEmpty(genes[i].Course.LecturerId) &&
+                    genes[i].TimeSlot.Overlaps(genes[j].TimeSlot))
+                {
+                    conflicts++;
+                }
+            }
+        }
+
+        return conflicts * PENALTY;
+    }
+
+    public string GetViolationMessage(Chromosome chromosome)
+    {
+        var conflicts = new List<string>();
+        var genes = chromosome.Genes;
+
+        for (int i = 0; i < genes.Count; i++)
+        {
+            for (int j = i + 1; j < genes.Count; j++)
+            {
+                if (genes[i].Course.LecturerId == genes[j].Course.LecturerId && 
+                    !string.IsNullOrEmpty(genes[i].Course.LecturerId) &&
+                    genes[i].TimeSlot.Overlaps(genes[j].TimeSlot))
+                {
+                    conflicts.Add($"Lecturer {genes[i].Course.LecturerId} has conflicting courses: " +
+                                $"{genes[i].Course.Code} and {genes[j].Course.Code} at {genes[i].TimeSlot}");
+                }
+            }
+        }
+
+        return $"Lecturer schedule conflicts: {string.Join(", ", conflicts)}";
+    }
 } 

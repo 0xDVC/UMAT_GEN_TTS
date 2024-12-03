@@ -30,17 +30,17 @@ public class FitnessCalculatorTests
             
             Console.WriteLine("\n1. Conflict-free chromosome:");
             Console.WriteLine("Expected: High fitness (close to 1.0)");
-            Console.WriteLine($"Actual fitness: {calculator.Calculate(goodChromosome)}");
+            Console.WriteLine($"Actual fitness: {calculator.CalculateFitness(goodChromosome)}");
             PrintChromosomeDetails(goodChromosome);
             
             Console.WriteLine("\n2. Time conflict chromosome:");
             Console.WriteLine("Expected: Lower fitness (around 0.6-0.8 due to time slot conflicts)");
-            Console.WriteLine($"Actual fitness: {calculator.Calculate(timeConflictChromosome)}");
+            Console.WriteLine($"Actual fitness: {calculator.CalculateFitness(timeConflictChromosome)}");
             PrintChromosomeDetails(timeConflictChromosome);
             
             Console.WriteLine("\n3. Room conflict chromosome:");
             Console.WriteLine("Expected: Lower fitness (around 0.6-0.8 due to room conflicts)");
-            Console.WriteLine($"Actual fitness: {calculator.Calculate(roomConflictChromosome)}");
+            Console.WriteLine($"Actual fitness: {calculator.CalculateFitness(roomConflictChromosome)}");
             PrintChromosomeDetails(roomConflictChromosome);
         }
         catch (Exception ex)

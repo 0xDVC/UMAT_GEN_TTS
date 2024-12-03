@@ -1,5 +1,4 @@
 using UMAT_GEN_TTS.Core.Interfaces;
-using UMAT_GEN_TTS.Core.Models;
 
 namespace UMAT_GEN_TTS.Core.GeneticAlgorithms;
 public class Chromosome
@@ -19,6 +18,6 @@ public class Chromosome
 
     public void CalculateFitness(IFitnessCalculator calculator)
     {
-        Fitness = calculator.Calculate(this);
+        Fitness = calculator.CalculateFitness(this);
     }
 } 

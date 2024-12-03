@@ -12,8 +12,8 @@ public class FitnessCalculator : IFitnessCalculator
         _constraintManager = new ConstraintManager();
     }
 
-    public double Calculate(Chromosome chromosome)
+    public double CalculateFitness(Chromosome chromosome)
     {
-        return _constraintManager.EvaluateFitness(chromosome);
+        return _constraintManager.CalculateFitness(chromosome);
     }
 } 

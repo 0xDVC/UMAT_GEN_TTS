@@ -10,7 +10,7 @@ public class DummyFitnessCalculator : IFitnessCalculator
         _fitnessValue = fitnessValue;
     }
 
-    public double Calculate(Chromosome chromosome)
+    public double CalculateFitness(Chromosome chromosome)
     {
         return _fitnessValue; // Return the dummy fitness value
     }

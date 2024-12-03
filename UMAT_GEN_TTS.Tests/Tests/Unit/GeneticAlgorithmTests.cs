@@ -47,7 +47,9 @@ public class GeneticAlgorithmTests
                 name: "Engineering Mathematics I",
                 studentCount: 120,
                 requiresLab: false,
-                weeklyHours: 4,
+                creditHours: 3,
+                sessionsPerWeek: 2,
+                hoursPerSession: 2,
                 mode: CourseMode.Virtual,
                 department: "Mathematics",
                 programmeYears: new List<ProgrammeYear>
@@ -61,7 +63,9 @@ public class GeneticAlgorithmTests
                 name: "Data Structures",
                 studentCount: 60,
                 requiresLab: true,
-                weeklyHours: 4,
+                creditHours: 3,
+                sessionsPerWeek: 2,
+                hoursPerSession: 2,
                 mode: CourseMode.Physical,
                 department: "Computer Science",
                 programmeYears: new List<ProgrammeYear>
@@ -74,7 +78,9 @@ public class GeneticAlgorithmTests
                 name: "Technical Communication",
                 studentCount: 90,
                 requiresLab: false,
-                weeklyHours: 2,
+                creditHours: 2,
+                sessionsPerWeek: 1,
+                hoursPerSession: 2,
                 mode: CourseMode.Hybrid,
                 department: "General Studies",
                 programmeYears: new List<ProgrammeYear>
@@ -88,25 +94,48 @@ public class GeneticAlgorithmTests
         Console.WriteLine("Generating rooms...");
         var rooms = new List<Room>
         {
+            // Computer Science Department Rooms
             new()
             {
-                Name = "LT1",
+                Name = "CSC-LT1",
                 Capacity = 200,
                 IsLab = false,
+                Building = "Computer Science Block",
+                Department = "Computer Science",
+                Ownership = RoomOwnership.Departmental,
                 Features = new() { "Projector", "Whiteboard" }
             },
             new()
             {
-                Name = "LAB1",
+                Name = "CSC-LAB1",
                 Capacity = 120,
                 IsLab = true,
+                Building = "Computer Science Block",
+                Department = "Computer Science",
+                Ownership = RoomOwnership.Departmental,
+                LabType = LabType.ComputerLab,
                 Features = new() { "Computers", "Projector" }
             },
+            // Faculty Shared Rooms
             new()
             {
-                Name = "CR2",
+                Name = "ENG-LT1",
+                Capacity = 150,
+                IsLab = false,
+                Building = "Engineering Block",
+                Department = "Engineering",
+                Ownership = RoomOwnership.Faculty,
+                Features = new() { "Projector", "Whiteboard" }
+            },
+            // General Purpose Rooms
+            new()
+            {
+                Name = "GP-LT1",
                 Capacity = 100,
                 IsLab = false,
+                Building = "Main Block",
+                Department = "General",
+                Ownership = RoomOwnership.GeneralPurpose,
                 Features = new() { "Whiteboard" }
             }
         };

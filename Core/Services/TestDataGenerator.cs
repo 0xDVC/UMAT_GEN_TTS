@@ -1,5 +1,7 @@
 using UMAT_GEN_TTS.Core.Models;
 
+namespace UMAT_GEN_TTS.Core.Services;
+
 public class TestDataGenerator
 {
     public static List<Course> GenerateSampleCourses(int count)
@@ -12,7 +14,9 @@ public class TestDataGenerator
                 name: $"Sample Course {i}",
                 studentCount: Random.Shared.Next(20, 100),
                 requiresLab: Random.Shared.Next(2) == 1,
-                weeklyHours: Random.Shared.Next(2, 4) * 2,
+                creditHours: Random.Shared.Next(2, 4),
+                sessionsPerWeek: 2,
+                hoursPerSession: 2,
                 mode: CourseMode.Physical,
                 department: "Computer Science"
             ));
@@ -49,7 +53,6 @@ public class TestDataGenerator
             new(16, 0, 0)
         };
 
-        int period = 1;
         foreach (var day in days)
         {
             foreach (var start in periodStarts)

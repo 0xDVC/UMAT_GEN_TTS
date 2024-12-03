@@ -122,74 +122,46 @@ namespace UMAT_GEN_TTS.Core.GeneticAlgorithms
             return population;
         }
 
+        private Room? FindSuitableRoom(Course course, List<Room> availableRooms)
+        {
+            if (course.Mode == CourseMode.Virtual)
+                return null;
+
+            var suitableRooms = availableRooms
+                .Where(r => course.CanUseRoom(r))
+                .OrderBy(r => r.Ownership != RoomOwnership.Departmental)  // Prefer departmental rooms
+                .ThenBy(r => Math.Abs(r.Capacity - course.StudentCount))  // Best capacity fit
+                .ToList();
+
+            return suitableRooms.FirstOrDefault();
+        }
+
         public Chromosome CreateRandomChromosome()
         {
             var chromosome = new Chromosome();
-            var remainingTimeSlots = new List<TimeSlot>(_timeSlots);
-
-            // Sort courses by priority (mandatory courses first, then by student count)
+            
+            // Sort courses by constraints (lab courses first, then by student count)
             var sortedCourses = _courses
-                .OrderByDescending(c => c.IsMandatory)
+                .OrderByDescending(c => c.RequiresLab)
                 .ThenByDescending(c => c.StudentCount)
                 .ToList();
-
+            
             foreach (var course in sortedCourses)
             {
-                Room? selectedRoom = null;
+                // Find suitable room based on new rules
+                var selectedRoom = FindSuitableRoom(course, _rooms);
                 
-                // Handle virtual courses first - they should NEVER get a room
-                if (course.Mode == CourseMode.Virtual)
-                {
-                    var availableTimeSlot = remainingTimeSlots
-                        .FirstOrDefault(ts => !chromosome.Genes
-                            .Any(g => g.TimeSlot.Overlaps(ts) && 
-                                     course.HasProgrammeConflict(g.Course)));
-
-                    // If no non-conflicting slot found, take any remaining slot
-                    availableTimeSlot ??= remainingTimeSlots.First();
-                    
-                    chromosome.Genes.Add(new Gene(course, availableTimeSlot, null));
-                    remainingTimeSlots.Remove(availableTimeSlot);
-                    continue; // Skip the rest of the loop for virtual courses
-                }
-
-                // For non-virtual courses, find suitable room
-                var suitableRooms = _rooms
-                    .Where(r => r.Capacity >= course.StudentCount && // Must fit the class
-                               r.Capacity <= course.StudentCount * 1.5 && // Not too big
-                               (!course.RequiresLab || r.IsLab)) // Must be lab if required
-                    .OrderBy(r => Math.Abs(r.Capacity - course.StudentCount)) // Best fit first
-                    .ToList();
-
-                // If no ideal room found, try with relaxed size constraints
-                if (!suitableRooms.Any())
-                {
-                    suitableRooms = _rooms
-                        .Where(r => r.Capacity >= course.StudentCount && // Must fit the class
-                                   (!course.RequiresLab || r.IsLab)) // Must be lab if required
-                        .OrderBy(r => r.Capacity) // Smallest suitable room first
-                        .ToList();
-                }
-
-                if (!suitableRooms.Any())
-                {
-                    throw new InvalidOperationException(
-                        $"No suitable room for course {course.Code} ({course.StudentCount} students)");
-                }
-
-                selectedRoom = suitableRooms.First();
-
                 // Find available time slot
-                var timeSlot = remainingTimeSlots
+                var availableSlot = _timeSlots
                     .FirstOrDefault(ts => !chromosome.Genes
                         .Any(g => g.TimeSlot.Overlaps(ts) && 
-                                 course.HasProgrammeConflict(g.Course)));
+                                 (g.Room == selectedRoom || // Same room
+                                  course.HasProgrammeConflict(g.Course)))); // Same programme
 
-                // If no non-conflicting slot found, take any remaining slot
-                timeSlot ??= remainingTimeSlots.First();
+                // If no slot found, take any non-conflicting slot
+                availableSlot ??= _timeSlots.First();
 
-                chromosome.Genes.Add(new Gene(course, timeSlot, selectedRoom));
-                remainingTimeSlots.Remove(timeSlot);
+                chromosome.Genes.Add(new Gene(course, availableSlot, selectedRoom));
             }
 
             return chromosome;

@@ -3,73 +3,61 @@ using UMAT_GEN_TTS.Core.GeneticAlgorithms;
 
 namespace UMAT_GEN_TTS.Core.Constraints
 {
-    public class ConstraintManager
+    public class ConstraintManager : IFitnessCalculator
     {
-        private readonly List<IConstraint> _hardConstraints;
-        private readonly List<IConstraint> _softConstraints;
+        private readonly List<(IConstraint Constraint, double Weight)> _constraints;
 
         public ConstraintManager()
         {
-            _hardConstraints = new List<IConstraint>
+            _constraints = new List<(IConstraint, double)>
             {
-                new TimeSlotConflictConstraint(),
-                new RoomConflictConstraint(),
-                new RoomCapacityConstraint(),
-                new LabRequirementConstraint(),
-                new CourseModeSuitabilityConstraint()
-            };
+                // Hard Constraints (higher weights)
+                (new RoomConflictConstraint(), 1.0),
+                (new RoomCapacityConstraint(), 1.0),
+                (new TimeSlotConflictConstraint(), 1.0),
+                (new CourseModeSuitabilityConstraint(), 1.0),
+                (new LabRequirementConstraint(), 1.0),
+                (new LecturerConflictConstraint(), 1.0),
 
-            _softConstraints = new List<IConstraint>
-            {
-                new RoomEfficiencyConstraint(),
-                new TimePreferenceConstraint(),
-                new ProgrammeYearSpreadConstraint(),
-                new LabPreferenceConstraint()
+                // Soft Constraints (lower weights)
+                (new RoomEfficiencyConstraint(), 0.5),
+                (new TimePreferenceConstraint(), 0.3),
+                (new ConsecutiveLecturesConstraint(), 0.3),
+                (new DailyTeachingLoadConstraint(), 0.4),
+                (new LunchBreakConstraint(), 0.4),
+                (new ProgrammeYearSpreadConstraint(), 0.3),
+                (new CombinedClassConstraint(), 0.8),
+                (new FlexibleScheduleConstraint(), 0.2)
             };
         }
 
-        public double EvaluateFitness(Chromosome chromosome)
+        public double CalculateFitness(Chromosome chromosome)
         {
-            double fitness = 1.0;
-            var violations = new List<(string Message, double Penalty)>();
+            double totalPenalty = 0;
+            var violations = new List<string>();
 
-            // Evaluate hard constraints first
-            foreach (var constraint in _hardConstraints)
+            foreach (var (constraint, weight) in _constraints)
             {
-                var penalty = constraint.EvaluatePenalty(chromosome);
+                var penalty = constraint.EvaluatePenalty(chromosome) * weight;
                 if (penalty > 0)
                 {
-                    violations.Add((constraint.GetViolationMessage(chromosome), penalty));
-                    fitness -= penalty;
+                    totalPenalty += penalty;
+                    violations.Add(constraint.GetViolationMessage(chromosome));
                 }
             }
 
-            // If hard constraints are severely violated, return minimal fitness
-            if (fitness < 0.2) return 0.1;
-
-            // Evaluate soft constraints
-            foreach (var constraint in _softConstraints)
-            {
-                var penalty = constraint.EvaluatePenalty(chromosome);
-                if (penalty > 0)
-                {
-                    violations.Add((constraint.GetViolationMessage(chromosome), penalty));
-                    fitness -= penalty * 0.5; // Soft constraints have less impact
-                }
-            }
-
-            // Log violations if any
+            // Print violations if any exist
             if (violations.Any())
             {
                 Console.WriteLine("\nConstraint Violations:");
-                foreach (var (message, penalty) in violations.OrderByDescending(v => v.Penalty))
+                foreach (var violation in violations)
                 {
-                    Console.WriteLine($"- {message} (Penalty: {penalty:F3})");
+                    Console.WriteLine($"- {violation}");
                 }
             }
 
-            // Ensure fitness stays within valid range
-            return Math.Max(0.1, Math.Min(1.0, fitness));
+            // Calculate fitness (1 is perfect, 0 is worst)
+            return Math.Max(0, 1 - totalPenalty);
         }
     }
 } 

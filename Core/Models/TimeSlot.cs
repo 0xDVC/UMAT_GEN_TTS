@@ -1,51 +1,43 @@
 namespace UMAT_GEN_TTS.Core.Models;
+using UMAT_GEN_TTS.Core.Helpers;
 
 public class TimeSlot
 {
+    public Guid Id { get; } = Guid.NewGuid();
     public DayOfWeek Day { get; set; }
     public TimeSpan StartTime { get; set; }
     public TimeSpan EndTime { get; set; }
-    public TimeOfDay PreferredTime { get; set; }
-    public int Period { get; set; }
+    public SessionType Type { get; init; }
+    public bool IsBreakTime { get; init; }
 
-    public TimeSlot(DayOfWeek day, TimeSpan startTime, TimeSpan endTime)
+    public int Period { get; init; }
+
+    // Helper methods
+    public long StartTimeTicks => TimeHelper.ToTicks(StartTime);
+    public long EndTimeTicks => TimeHelper.ToTicks(EndTime);
+
+    // For deserialization
+    public void SetStartTimeTicks(long ticks) => StartTime = TimeHelper.FromTicks(ticks);
+    public void SetEndTimeTicks(long ticks) => EndTime = TimeHelper.FromTicks(ticks);
+
+    public TimeSlot(DayOfWeek day, TimeSpan startTime, TimeSpan endTime, 
+        SessionType type = SessionType.Lecture, bool isBreakTime = false)
     {
         Day = day;
         StartTime = startTime;
         EndTime = endTime;
-        Period = startTime.Hours - 7;  // Calculate period based on start time
+        Type = type;
+        IsBreakTime = isBreakTime;
     }
 
-    public bool IsPreferred
-    {
-        get
-        {
-            var hour = StartTime.Hours;
-            return PreferredTime switch
-            {
-                TimeOfDay.Morning => hour >= 8 && hour < 12,
-                TimeOfDay.Afternoon => hour >= 12 && hour < 16,
-                TimeOfDay.Evening => hour >= 16 && hour < 20,
-                _ => false
-            };
-        }
-    }
-
-    public bool Overlaps(TimeSlot other)
-    {
-        if (Day != other.Day) return false;
-        return StartTime < other.EndTime && other.StartTime < EndTime;
-    }
-
-    public override string ToString()
-    {
-        return $"{Day} {StartTime.Hours:D2}:{StartTime.Minutes:D2}-{EndTime.Hours:D2}:{EndTime.Minutes:D2}";
-    }
+    public bool Overlaps(TimeSlot other) =>
+        Day == other.Day && StartTime < other.EndTime && EndTime > other.StartTime;
 }
 
-public enum TimeOfDay
+public enum SessionType
 {
-    Morning,
-    Afternoon,
-    Evening
+    Lecture,
+    Lab,
+    Practical,
+    Combined
 } 

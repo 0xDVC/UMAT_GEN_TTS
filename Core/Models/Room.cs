@@ -2,28 +2,61 @@ namespace UMAT_GEN_TTS.Core.Models;
 
 public class Room
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
-    public string Name { get; set; }
-    public int Capacity { get; set; }
-    public bool IsLab { get; set; }
-    public string Building { get; set; }
-    public string Department { get; set; }
-    public RoomOwnership Ownership { get; set; }
-    public LabType? LabType { get; set; }
-    public List<string> Features { get; set; } = new();
+    public Guid Id { get; } = Guid.NewGuid();
+    public string Name { get; init; }
+    public string Building { get; init; }
+    public string Floor { get; init; }
+    public int MinCapacity { get; init; }
+    public int MaxCapacity { get; init; }
+    public bool IsLab { get; init; }
+    public LabType? LabType { get; init; }
+    public RoomOwnership Ownership { get; init; }
+    public Department AssignedDepartment { get; init; }
+    public List<string> Features { get; init; } = new();
+    public List<string> Equipment { get; init; } = new();
+    public List<TimeSlot> AvailableSlots { get; private set; } = new();
+    public int PreferredGroupSize { get; init; }
+    public bool IsAvailable { get; set; } = true;
+
+    public bool IsAvailableForTimeSlot(TimeSlot slot)
+    {
+        if (!IsAvailable) return false;
+        if (!AvailableSlots.Any()) return true;
+        return !AvailableSlots.Any(s => s.Overlaps(slot));
+    }
+
+    public bool IsAvailableForCourse(Course course, TimeSlot slot)
+    {
+        return IsAvailableForTimeSlot(slot) && 
+               MaxCapacity >= course.StudentCount &&
+               (!course.RequiresLab || IsLab) &&
+               (AssignedDepartment == course.AssignedDepartment || 
+                Ownership == RoomOwnership.GeneralPurpose);
+    }
+
+    public static List<Room> GetAvailableRooms(IEnumerable<Room> rooms, Course course, TimeSlot slot)
+    {
+        return rooms
+            .Where(r => r.IsAvailableForCourse(course, slot))
+            .OrderBy(r => Math.Abs(r.PreferredGroupSize - course.StudentCount))
+            .ToList();
+    }
 }
 
 public enum RoomOwnership
 {
-    Departmental,    // Only department can use
-    Faculty,         // Priority to faculty departments
-    GeneralPurpose   // Anyone can use
+    Departmental,    
+    GeneralPurpose
 }
 
 public enum LabType
 {
-    ComputerLab,     // Can be substituted with rooms with projectors
-    ElectricalLab,   // Must be scheduled here
-    ChemistryLab,    // Must be scheduled here
-    PhysicsLab       // Must be scheduled here
+    ComputerLab,
+    ElectricalLab,
+    MiningLab,
+    MineralsLab,
+    GeologyLab,
+    GeomaticsLab,
+    MechanicalLab,
+    ChemistryLab
 }

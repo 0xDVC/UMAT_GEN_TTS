@@ -1,226 +1,200 @@
-using UMAT_GEN_TTS.Core.Interfaces;
 using UMAT_GEN_TTS.Core.Models;
+using UMAT_GEN_TTS.Core.Interfaces;
+using UMAT_GEN_TTS.Core.Validator;
+using UMAT_GEN_TTS.Core.Debug;
+using System.Diagnostics;
 
-namespace UMAT_GEN_TTS.Core.GeneticAlgorithms
+namespace UMAT_GEN_TTS.Core.GeneticAlgorithms;
+
+public class TimetableGeneticAlgorithm
 {
-    public class TimetableGeneticAlgorithm
+    private readonly PopulationManager _populationManager;
+    private readonly ISelectionStrategy _selectionStrategy;
+    private readonly ICrossoverStrategy _crossoverStrategy;
+    private readonly IMutationStrategy _mutationStrategy;
+    private readonly IFitnessCalculator _fitnessCalculator;
+    private readonly TimetableValidator _validator;
+    private readonly TimetableDebugger _debugger;
+    private readonly Stopwatch _stopwatch = new();
+    
+    private readonly int _maxGenerations;
+    private readonly double _targetFitness;
+    private readonly int _stagnationLimit;
+    private readonly double _convergenceThreshold;
+    
+    private int _currentGeneration;
+    private double _bestFitness;
+    private ValidationResult _lastValidation;
+    private readonly ILogger<TimetableGeneticAlgorithm> _logger;
+    private double _currentMutationRate;
+    private int _generationsWithoutImprovement;
+
+    public TimetableGeneticAlgorithm(
+        PopulationManager populationManager,
+        ISelectionStrategy selectionStrategy,
+        ICrossoverStrategy crossoverStrategy,
+        IMutationStrategy mutationStrategy,
+        IFitnessCalculator fitnessCalculator,
+        TimetableValidator validator,
+        ILogger<TimetableGeneticAlgorithm> logger,
+        TimetableDebugger debugger,
+        int maxGenerations = 1000,
+        double targetFitness = 0.95,
+        int stagnationLimit = 20,
+        double convergenceThreshold = 0.001)
     {
-        private readonly IFitnessCalculator _fitnessCalculator;
-        private readonly ISelectionStrategy _selectionStrategy;
-        private readonly ICrossoverStrategy _crossoverStrategy;
-        private readonly IMutationStrategy _mutationStrategy;
-        private readonly int _populationSize;
-        private readonly int _maxGenerations;
-        private readonly double _targetFitness;
+        _populationManager = populationManager;
+        _selectionStrategy = selectionStrategy;
+        _crossoverStrategy = crossoverStrategy;
+        _mutationStrategy = mutationStrategy;
+        _fitnessCalculator = fitnessCalculator;
+        _validator = validator;
+        _logger = logger;
+        _debugger = debugger;
+        
+        _maxGenerations = maxGenerations;
+        _targetFitness = targetFitness;
+        _stagnationLimit = stagnationLimit;
+        _convergenceThreshold = convergenceThreshold;
+    }
 
-        private List<Course> _courses;
-        private List<Room> _rooms;
-        private List<TimeSlot> _timeSlots;
+    public async Task<Chromosome> Evolve(EvolutionParameters parameters)
+    {
+        _logger.LogInformation("GA: Starting evolution with {CourseCount} courses", 
+            parameters.Courses.Count);
+        _stopwatch.Start();
+        _debugger.LogInitialization(parameters.Courses, parameters.AvailableRooms);
 
-        public TimetableGeneticAlgorithm(
-            IFitnessCalculator fitnessCalculator,
-            ISelectionStrategy selectionStrategy,
-            ICrossoverStrategy crossoverStrategy,
-            IMutationStrategy mutationStrategy,
-            int populationSize = 50,
-            int maxGenerations = 1000,
-            double targetFitness = 0.95)
+        var population = _populationManager.InitializePopulation(parameters.Courses);
+        _bestFitness = population.Max(c => c.Fitness);
+        
+        _debugger.LogGenerationProgress(0, population, _bestFitness);
+
+        var generation = 0;
+        return await Task.Run(async () =>
         {
-            _fitnessCalculator = fitnessCalculator;
-            _selectionStrategy = selectionStrategy;
-            _crossoverStrategy = crossoverStrategy;
-            _mutationStrategy = mutationStrategy;
-            _populationSize = populationSize;
-            _maxGenerations = maxGenerations;
-            _targetFitness = targetFitness;
-        }
-
-        public void Initialize(List<Course> courses, List<Room> rooms, List<TimeSlot> timeSlots)
-        {
-            _courses = courses;
-            _rooms = rooms;
-            _timeSlots = timeSlots;
-        }
-
-        public Chromosome Run()
-        {
-            // 1. Initialize population
-            var population = InitializePopulation();
-            var bestChromosome = population[0];
-            var generation = 0;
-
-            Console.WriteLine("Starting genetic algorithm...");
-            Console.WriteLine($"Population size: {_populationSize}");
-            Console.WriteLine($"Target fitness: {_targetFitness}");
-
-            while (generation < _maxGenerations)
+            while (!ShouldTerminate(population))
             {
-                generation++;
+                // Log EVERY generation
+                _logger.LogInformation($"Generation {generation:D4} | " +
+                    $"Best: {_bestFitness:F2} | " +
+                    $"Avg: {population.Average(c => c.Fitness):F2} | " +
+                    $"Mutation: {_currentMutationRate:F2} | " +
+                    $"No Improvement: {_generationsWithoutImprovement}");
 
-                // 2. Evaluate fitness for all chromosomes
-                foreach (var chromosome in population)
+                // Selection and crossover
+                var parents = _selectionStrategy.Select(population, population.Count / 2);
+                var offspring = CreateOffspring(parents);
+                
+                // Adaptive mutation
+                AdaptParameters(population);
+                foreach (var child in offspring)
                 {
-                    chromosome.CalculateFitness(_fitnessCalculator);
+                    _mutationStrategy.Mutate(child);
+                    child.CalculateFitness(_fitnessCalculator);
                 }
-
-                // 3. Find best chromosome
-                var currentBest = population.MaxBy(c => c.Fitness);
-                if (currentBest.Fitness > bestChromosome.Fitness)
+                
+                // Population management
+                _populationManager.RepairPopulation(offspring);
+                population = _populationManager.ReplacePopulation(population, offspring);
+                
+                // Update statistics
+                var currentBestFitness = population.Max(c => c.Fitness);
+                if (currentBestFitness > _bestFitness)
                 {
-                    bestChromosome = currentBest;
-                    Console.WriteLine($"Generation {generation}: New best fitness = {bestChromosome.Fitness}");
-                }
-
-                // 4. Check if target fitness reached
-                if (bestChromosome.Fitness >= _targetFitness)
-                {
-                    Console.WriteLine($"Target fitness reached at generation {generation}!");
-                    break;
-                }
-
-                // 5. Create new population
-                var newPopulation = new List<Chromosome>();
-
-                while (newPopulation.Count < _populationSize)
-                {
-                    // Select parents
-                    var parents = _selectionStrategy.Select(population, 2);
-                    if (parents.Count != 2) continue;
-
-                    // Perform crossover
-                    var (offspring1, offspring2) = _crossoverStrategy.Crossover(parents[0], parents[1]);
-
-                    // Perform mutation
-                    _mutationStrategy.Mutate(offspring1);
-                    _mutationStrategy.Mutate(offspring2);
-
-                    newPopulation.Add(offspring1);
-                    newPopulation.Add(offspring2);
-                }
-
-                // 6. Replace old population
-                population = newPopulation;
-            }
-
-            Console.WriteLine($"\nGenetic Algorithm completed after {generation} generations");
-            Console.WriteLine($"Best fitness achieved: {bestChromosome.Fitness}");
-
-            return bestChromosome;
-        }
-
-        private List<Chromosome> InitializePopulation()
-        {
-            var population = new List<Chromosome>();
-
-            for (int i = 0; i < _populationSize; i++)
-            {
-                var chromosome = CreateRandomChromosome();
-                chromosome.CalculateFitness(_fitnessCalculator);
-                population.Add(chromosome);
-            }
-
-            return population;
-        }
-
-        private Room? FindSuitableRoom(Course course, List<Room> availableRooms)
-        {
-            if (course.Mode == CourseMode.Virtual)
-                return null;
-
-            var suitableRooms = availableRooms
-                .Where(r => course.CanUseRoom(r))
-                .OrderBy(r => r.Ownership != RoomOwnership.Departmental)  // Prefer departmental rooms
-                .ThenBy(r => Math.Abs(r.Capacity - course.StudentCount))  // Best capacity fit
-                .ToList();
-
-            return suitableRooms.FirstOrDefault();
-        }
-
-        public Chromosome CreateRandomChromosome()
-        {
-            var chromosome = new Chromosome();
-            
-            // Sort courses by constraints (most constrained first):
-            var sortedCourses = _courses
-                .OrderByDescending(c => c.ProgrammeYears.Count)  // Multi-programme courses first
-                .ThenByDescending(c => c.RequiresLab)           // Lab courses second
-                .ThenByDescending(c => c.StudentCount)          // Larger classes third
-                .ThenByDescending(c => c.CreditHours)           // Higher credit hours fourth
-                .ToList();
-            
-            foreach (var course in sortedCourses)
-            {
-                // Find available time slots (no conflicts)
-                var availableSlots = _timeSlots
-                    .Where(ts => !HasTimeConflict(chromosome, course, ts))
-                    .ToList();
-
-                // If no conflict-free slots, find least conflicting slot
-                TimeSlot selectedSlot;
-                if (!availableSlots.Any())
-                {
-                    selectedSlot = FindLeastConflictingSlot(chromosome, course, _timeSlots);
-                    Console.WriteLine($"Warning: Had to use conflicting slot for {course.Code}");
+                    _bestFitness = currentBestFitness;
+                    _generationsWithoutImprovement = 0;
                 }
                 else
                 {
-                    selectedSlot = availableSlots[Random.Shared.Next(availableSlots.Count)];
+                    _generationsWithoutImprovement++;
                 }
 
-                // Find suitable room
-                var selectedRoom = course.Mode != CourseMode.Virtual 
-                    ? FindSuitableRoom(course, _rooms)
-                    : null;
+                // Enforce diversity if needed
+                if (_generationsWithoutImprovement > 10)
+                {
+                    _populationManager.EnforceDiversity(population);
+                }
 
-                chromosome.Genes.Add(new Gene(course, selectedSlot, selectedRoom));
+                generation++;
+                _currentGeneration = generation;
+                
+                // Validate best solution
+                var currentBest = population.MaxBy(c => c.Fitness) 
+                    ?? throw new InvalidOperationException("No valid solution found");
+                _lastValidation = _validator.ValidateSolution(currentBest);
+                
+                if (_lastValidation.IsValid && _lastValidation.FinalFitness >= _targetFitness)
+                {
+                    _logger.LogInformation("Target fitness achieved with valid solution");
+                    break;
+                }
+
+                _debugger.LogGenerationProgress(generation, population, _bestFitness);
+
+                await Task.Delay(100);
             }
 
-            return chromosome;
-        }
+            _logger.LogInformation("=== Evolution Complete ===");
+            _logger.LogInformation($"Final Generation: {generation}");
+            _logger.LogInformation($"Best Fitness Achieved: {_bestFitness:F2}");
+            
+            var bestSolution = population.MaxBy(c => c.Fitness) 
+                ?? throw new InvalidOperationException("No valid solution found");
 
-        private bool HasTimeConflict(Chromosome chromosome, Course newCourse, TimeSlot timeSlot)
+            _stopwatch.Stop();
+            _debugger.LogAlgorithmCompletion(bestSolution, _stopwatch.Elapsed);
+
+            return bestSolution;
+        });
+    }
+
+    private void AdaptParameters(List<Chromosome> population)
+    {
+        var diversity = _populationManager.GetStatistics(population).Diversity;
+        
+        if (_generationsWithoutImprovement > 10)
         {
-            return chromosome.Genes.Any(g => 
-                g.TimeSlot.Overlaps(timeSlot) && (
-                    // Same lecturer
-                    g.Course.LecturerId == newCourse.LecturerId ||
-                    // Same programme year
-                    g.Course.HasProgrammeConflict(newCourse) ||
-                    // Same room (if not virtual)
-                    (newCourse.Mode != CourseMode.Virtual && 
-                     g.Room != null && 
-                     g.Room == FindSuitableRoom(newCourse, _rooms))
-                )
-            );
+            _currentMutationRate = Math.Min(_currentMutationRate * 1.5, 0.4);
         }
-
-        private TimeSlot FindLeastConflictingSlot(Chromosome chromosome, Course course, List<TimeSlot> slots)
+        else if (diversity < _convergenceThreshold)
         {
-            return slots
-                .OrderBy(ts => CountConflicts(chromosome, course, ts))
-                .First();
+            _currentMutationRate = Math.Min(_currentMutationRate * 1.2, 0.3);
         }
-
-        private int CountConflicts(Chromosome chromosome, Course course, TimeSlot slot)
+        else
         {
-            var conflicts = 0;
-            foreach (var gene in chromosome.Genes.Where(g => g.TimeSlot.Overlaps(slot)))
-            {
-                // Lecturer conflict (highest priority)
-                if (gene.Course.LecturerId == course.LecturerId)
-                    conflicts += 100;
-
-                // Programme year conflict (high priority)
-                if (gene.Course.HasProgrammeConflict(course))
-                    conflicts += 50;
-
-                // Room conflict (medium priority)
-                if (course.Mode != CourseMode.Virtual && 
-                    gene.Room != null && 
-                    gene.Room == FindSuitableRoom(course, _rooms))
-                    conflicts += 25;
-            }
-            return conflicts;
+            _currentMutationRate = _mutationStrategy.BaseMutationRate;
         }
+        
+        if (_mutationStrategy is AdaptiveMutation adaptiveMutation)
+        {
+            adaptiveMutation.SetCurrentRate(_currentMutationRate);
+        }
+    }
+
+    private bool ShouldTerminate(List<Chromosome> population)
+    {
+        if (_currentGeneration >= _maxGenerations) return true;
+        if (_bestFitness >= _targetFitness) return true;
+        if (_generationsWithoutImprovement >= _stagnationLimit) return true;
+        
+        var populationDiversity = _populationManager.GetStatistics(population).Diversity;
+        if (populationDiversity < _convergenceThreshold) return true;
+        
+        return false;
+    }
+
+    private List<Chromosome> CreateOffspring(List<Chromosome> parents)
+    {
+        var offspring = new List<Chromosome>();
+        
+        for (int i = 0; i < parents.Count - 1; i += 2)
+        {
+            var (child1, child2) = _crossoverStrategy.Crossover(parents[i], parents[i + 1]);
+            offspring.Add(child1);
+            offspring.Add(child2);
+        }
+        
+        return offspring;
     }
 }

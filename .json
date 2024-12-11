@@ -1,0 +1,229 @@
+{
+  "courses": [
+    {
+      "code": 171,
+      "name": "Engineering Mathematics I",
+      "studentCount": 180,
+      "mode": 0,
+      "assignedDepartment": {
+        "name": "Mathematics",
+        "code": "MTH",
+        "programmes": [
+          {
+            "name": "Civil Engineering",
+            "code": "CE",
+            "department": "MTH",
+            "year": 1,
+            "durationYears": 4,
+            "maxCreditsPerSemester": 21,
+            "coreCourses": ["MTH171"],
+            "electiveCourses": [],
+            "curriculum": [
+              {
+                "year": 1,
+                "semesters": [
+                  {
+                    "number": 1,
+                    "courses": ["MTH171"],
+                    "minimumCredits": 15,
+                    "maximumCredits": 21
+                  }
+                ]
+              }
+            ],
+            "maxWeeklyHours": 30
+          }
+        ],
+        "lecturerIds": ["MTH001"],
+        "isActive": true
+      },
+      "lecturer": {
+        "staffId": "MTH001",
+        "name": "Dr. Mathematics",
+        "department": {
+          "name": "Mathematics",
+          "code": "MTH",
+          "isActive": true
+        },
+        "assignedCourses": ["MTH171"],
+        "preferredTimeSlots": [
+          {
+            "day": 1,
+            "startTime": {
+              "ticks": 252000000000
+            },
+            "endTime": {
+              "ticks": 288000000000
+            },
+            "type": 0,
+            "isBreakTime": false,
+            "period": 1
+          }
+        ],
+        "preferredDays": ["Monday", "Wednesday", "Friday"],
+        "daysNotAvailable": [5, 6],
+        "maxDailyHours": 6,
+        "maxWeeklyHours": 18,
+        "isActive": true
+      }, "weeklyHours": 3,
+      "sessionsPerWeek": 2,
+      "sessionDuration": 2,
+      "requiresLab": false,
+      "hasLabSessions": false,
+      "hasPractical": false,
+      "programmeYears": [
+        {
+          "name": "Civil Engineering",
+          "code": "CE",
+          "department": "CE",
+          "year": 1,
+          "durationYears": 4,
+          "maxCreditsPerSemester": 21,
+          "coreCourses": ["MTH171"],
+          "electiveCourses": [],
+          "curriculum": [
+            {
+              "year": 1,
+              "semesters": [
+                {
+                  "number": 1,
+                  "courses": ["MTH171"],
+                  "minimumCredits": 15,
+                  "maximumCredits": 21
+                }
+              ]
+            }
+          ],
+          "maxWeeklyHours": 30
+        }
+      ],
+      "subClasses": [],
+      "preferences": {
+        "preferredTimeSlots": {
+          "additionalProp1": 0.8
+        },
+        "preferredRooms": {
+          "LH1": 0.9
+        },
+        "preferredDays": [1, 2, 3],
+        "daysNotAvailable": [5, 6],
+        "preferredSessionType": 0,
+        "spreadPreference": 1,
+        "requiresConsecutiveSessions": false
+      }
+    }
+  ],    "rooms": [
+      {
+        "name": "Great Hall",
+        "building": "Main Block",
+        "floor": "Ground",
+        "minCapacity": 150,
+        "maxCapacity": 200,
+        "isLab": false,
+        "labType": 0,
+        "ownership": 1,
+        "assignedDepartment": null,
+        "features": ["Projector", "Sound System"],
+        "equipment": ["Whiteboard", "Podium"],
+        "preferredGroupSize": 180,
+        "isAvailable": true
+      },
+      {
+        "name": "CSC Lab 1",
+        "building": "ICT Block",
+        "floor": "First",
+        "minCapacity": 30,
+        "maxCapacity": 50,
+        "isLab": true,
+        "labType": 1,
+        "ownership": 0,
+        "assignedDepartment": {
+          "name": "Computer Science",
+          "code": "CSC",
+          "programmes": [],
+          "lecturerIds": [],
+          "isActive": true
+        },
+        "features": ["Computers", "Projector"],
+        "equipment": ["Development Software", "Networking Equipment"],
+        "preferredGroupSize": 40,
+        "isAvailable": true
+      }
+    ],
+    "configuration": {
+      "timeSettings": {
+        "dayConfigurations": {
+          "1": {
+            "startTime": {
+              "ticks": 252000000000  
+            },
+            "endTime": {
+              "ticks": 612000000000 
+            },
+            "breaks": [
+              {
+                "startTime": {
+                  "ticks": 468000000000  
+                },
+                "duration": {
+                  "ticks": 18000000000  
+                }
+              }
+            ],
+            "allowedDurations": [
+              {
+                "ticks": 36000000000   
+              },
+              {
+                "ticks": 72000000000   
+              },
+              {
+                "ticks": 108000000000  
+              }
+            ]
+          }
+        },
+        "minSessionDuration": {
+          "ticks": 36000000000  
+        },
+        "maxSessionDuration": {
+          "ticks": 108000000000  
+        },
+        "allowWeekends": false
+      },
+      "roomSettings": {
+        "minRoomCapacity": 30,
+        "maxRoomCapacity": 200,
+        "allowSharedRooms": true,
+        "requireLabEquipment": true,
+        "departmentRooms": {
+          "CSC": ["CSC Lab 1"],
+          "MTH": ["LH1"]
+        }
+      },
+      "constraintSettings": {
+        "hardConstraintWeights": {
+          "RoomCapacity": 1.0,
+          "TimeSlotConflict": 1.0,
+          "LecturerConflict": 1.0
+        },
+        "softConstraintWeights": {
+          "PreferredTimeSlot": 0.3,
+          "PreferredRoom": 0.2,
+          "ConsecutiveSessions": 0.1
+        },
+        "minAcceptableFitness": 0.80,
+        "strictConstraintMode": false
+      },
+      "algorithmSettings": {
+        "maxGenerations": 500,
+        "targetFitness": 0.80,
+        "populationSize": 50,
+        "elitismRate": 0.2,
+        "mutationRate": 0.3,
+        "stagnationLimit": 30,
+        "crossoverRate": 0.9,
+        "tournamentSize": 3
+      }
+    }
+}

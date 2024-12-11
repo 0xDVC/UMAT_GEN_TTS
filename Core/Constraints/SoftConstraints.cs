@@ -13,11 +13,11 @@ public class RoomEfficiencyConstraint : IConstraint
     public double EvaluatePenalty(Chromosome chromosome)
     {
         double penalty = 0;
-        foreach (var gene in chromosome.Genes)
+        foreach (var gene in chromosome.Genes.Where(g => g.Room != null && g.Course != null))
         {
-            if (gene.Room != null && gene.Course.Mode != CourseMode.Virtual)
+            if (gene.Course.Mode != CourseMode.Virtual)
             {
-                double utilization = (double)gene.Course.StudentCount / gene.Room.Capacity;
+                double utilization = (double)gene.Course.StudentCount / gene.Room!.MaxCapacity;
                 
                 if (utilization < OPTIMAL_UTILIZATION_MIN)
                 {
@@ -35,12 +35,12 @@ public class RoomEfficiencyConstraint : IConstraint
     public string GetViolationMessage(Chromosome chromosome)
     {
         var inefficientRooms = chromosome.Genes
-            .Where(g => g.Room != null && g.Course.Mode != CourseMode.Virtual)
+            .Where(g => g.Room != null && g.Course != null && g.Course.Mode != CourseMode.Virtual)
             .Where(g => {
-                double utilization = (double)g.Course.StudentCount / g.Room.Capacity;
+                double utilization = (double)g.Course.StudentCount / g.Room!.MaxCapacity;
                 return utilization < OPTIMAL_UTILIZATION_MIN || utilization > OPTIMAL_UTILIZATION_MAX;
             })
-            .Select(g => $"{g.Course.Code} in {g.Room.Name} ({g.Course.StudentCount}/{g.Room.Capacity} = {(double)g.Course.StudentCount / g.Room.Capacity:P0})");
+            .Select(g => $"{g.Course.Code} in {g.Room!.Name} ({g.Course.StudentCount}/{g.Room.MaxCapacity} = {(double)g.Course.StudentCount / g.Room.MaxCapacity:P0})");
         
         return $"Room efficiency issues: {string.Join(", ", inefficientRooms)}";
     }
@@ -70,50 +70,60 @@ public class TimePreferenceConstraint : IConstraint
 
 public class ProgrammeYearSpreadConstraint : IConstraint
 {
-    public const double PENALTY = 0.1;
+    public const double PENALTY = 0.2;
+    private const int MAX_DAILY_SESSIONS = 3;
+    private const int MIN_DAYS_SPREAD = 2;
 
     public double EvaluatePenalty(Chromosome chromosome)
     {
-        var penalty = 0.0;
-        var programmeYearGroups = chromosome.Genes
-            .SelectMany(g => g.Course.ProgrammeYears
-                .Select(py => (ProgrammeYear: py, TimeSlot: g.TimeSlot)))
-            .GroupBy(x => x.ProgrammeYear);
+        var programmeGroups = chromosome.Genes
+            .SelectMany(g => g.Course.ProgrammeYears.Select(py => 
+                new { ProgrammeYear = py, Gene = g }))
+            .GroupBy(x => new { x.ProgrammeYear.Code, x.ProgrammeYear.Year });
 
-        foreach (var group in programmeYearGroups)
+        double penalty = 0;
+        foreach (var group in programmeGroups)
         {
-            // Penalize if more than 2 courses on the same day
-            var coursesPerDay = group
-                .GroupBy(x => x.TimeSlot.Day)
-                .Where(g => g.Count() > 2);
+            // Check daily session count
+            var dailySessions = group
+                .GroupBy(x => x.Gene.TimeSlot.Day)
+                .Where(d => d.Count() > MAX_DAILY_SESSIONS);
+            penalty += dailySessions.Count() * 0.5;
 
-            penalty += coursesPerDay.Count() * 0.5;
+            // Check spread across week
+            var uniqueDays = group.Select(x => x.Gene.TimeSlot.Day).Distinct().Count();
+            if (uniqueDays < MIN_DAYS_SPREAD)
+            {
+                penalty += (MIN_DAYS_SPREAD - uniqueDays) * 0.5;
+            }
         }
-
         return penalty * PENALTY;
     }
 
     public string GetViolationMessage(Chromosome chromosome)
     {
         var violations = new List<string>();
-        var programmeYearGroups = chromosome.Genes
-            .SelectMany(g => g.Course.ProgrammeYears
-                .Select(py => (ProgrammeYear: py, Course: g.Course, TimeSlot: g.TimeSlot)))
-            .GroupBy(x => x.ProgrammeYear);
+        var programmeGroups = chromosome.Genes
+            .SelectMany(g => g.Course.ProgrammeYears.Select(py => 
+                new { ProgrammeYear = py, Gene = g }))
+            .GroupBy(x => new { x.ProgrammeYear.Code, x.ProgrammeYear.Year });
 
-        foreach (var group in programmeYearGroups)
+        foreach (var group in programmeGroups)
         {
-            var heavyDays = group
-                .GroupBy(x => x.TimeSlot.Day)
-                .Where(g => g.Count() > 2);
+            var dailyOverloads = group
+                .GroupBy(x => x.Gene.TimeSlot.Day)
+                .Where(d => d.Count() > MAX_DAILY_SESSIONS)
+                .Select(d => $"{group.Key.Code} Year {group.Key.Year}: {d.Count()} sessions on {d.Key}");
+            violations.AddRange(dailyOverloads);
 
-            foreach (var day in heavyDays)
+            var uniqueDays = group.Select(x => x.Gene.TimeSlot.Day).Distinct().Count();
+            if (uniqueDays < MIN_DAYS_SPREAD)
             {
-                violations.Add($"{group.Key}: {day.Key} has {day.Count()} courses");
+                violations.Add($"{group.Key.Code} Year {group.Key.Year}: Spread across only {uniqueDays} days");
             }
         }
 
-        return $"Programme year spread violations: {string.Join(", ", violations)}";
+        return $"Programme spread violations: {string.Join(", ", violations)}";
     }
 }
 
@@ -126,43 +136,30 @@ public class LabPreferenceConstraint : IConstraint
         double penalty = 0;
         foreach (var gene in chromosome.Genes)
         {
-            // For courses that might benefit from lab but don't require it
-            if (!gene.Course.RequiresLab && 
-                gene.Course.Mode != CourseMode.Virtual &&
-                IsTechnicalCourse(gene.Course) &&
-                (gene.Room == null || !gene.Room.IsLab))
+            // Must be in lab if course requires it
+            if (gene.Course.RequiresLab && (gene.Room == null || !gene.Room.IsLab))
             {
                 penalty += 1.0;
+            }
+            // Should try to get lab if course has lab sessions
+            else if (gene.Course.HasLabSessions && 
+                     gene.Course.Mode != CourseMode.Virtual &&
+                     (gene.Room == null || !gene.Room.IsLab))
+            {
+                penalty += 0.5; // Lower penalty for preference vs requirement
             }
         }
         return penalty * PENALTY;
     }
 
-    private bool IsTechnicalCourse(Course course)
-    {
-        // Consider courses from technical departments that might benefit from lab access
-        var technicalDepartments = new[] 
-        { 
-            "Computer Science", 
-            "Engineering",
-            "Physics",
-            "Chemistry",
-            "Biology"
-        };
-        
-        return technicalDepartments.Contains(course.Department);
-    }
-
     public string GetViolationMessage(Chromosome chromosome)
     {
         var violations = chromosome.Genes
-            .Where(g => !g.Course.RequiresLab && 
-                       g.Course.Mode != CourseMode.Virtual &&
-                       IsTechnicalCourse(g.Course) &&
+            .Where(g => (g.Course.RequiresLab || g.Course.HasLabSessions) &&
                        (g.Room == null || !g.Room.IsLab))
-            .Select(g => $"{g.Course.Code} ({g.Course.Department})");
+            .Select(g => $"{g.Course.Code} ({(g.Course.RequiresLab ? "Requires" : "Prefers")} lab)");
 
-        return $"Lab preference not met for technical courses: {string.Join(", ", violations)}";
+        return $"Lab assignment issues: {string.Join(", ", violations)}";
     }
 }
 
@@ -404,7 +401,7 @@ public class CombinedClassConstraint : IConstraint
             var course = courseGroup.First().Course;
             var totalStudents = course.StudentCount;
             var programmes = course.ProgrammeYears;
-            var departments = programmes.Select(p => p.ProgrammeCode.Substring(0, 2)).Distinct();
+            var departments = programmes.Select(p => p.Code.Substring(0, 2)).Distinct();
             var room = courseGroup.First().Room;
 
             // Rule 1: Multiple departments should default to virtual
@@ -419,7 +416,7 @@ public class CombinedClassConstraint : IConstraint
             // Rule 2: Check if hybrid mode is possible and correctly assigned
             if (departments.Count() > 1 && room != null)
             {
-                if (room.Capacity < totalStudents)
+                if (room.MaxCapacity < totalStudents)
                 {
                     // Should be virtual if no room can accommodate
                     penalty += 1.0;
@@ -439,7 +436,7 @@ public class CombinedClassConstraint : IConstraint
                     // Need a room for same department classes unless virtual
                     penalty += 1.0;
                 }
-                else if (room != null && room.Capacity < totalStudents)
+                else if (room != null && room.MaxCapacity < totalStudents)
                 {
                     // Room too small for combined class
                     penalty += 1.0;
@@ -462,7 +459,7 @@ public class CombinedClassConstraint : IConstraint
             var course = courseGroup.First().Course;
             var totalStudents = course.StudentCount;
             var programmes = course.ProgrammeYears;
-            var departments = programmes.Select(p => p.ProgrammeCode.Substring(0, 2)).Distinct();
+            var departments = programmes.Select(p => p.Code.Substring(0, 2)).Distinct();
             var room = courseGroup.First().Room;
 
             var deptList = string.Join(", ", departments);
@@ -472,12 +469,12 @@ public class CombinedClassConstraint : IConstraint
                 violations.Add($"{course.Code}: Multi-department class ({deptList}) should be virtual");
             }
 
-            if (departments.Count() > 1 && room != null && room.Capacity < totalStudents)
+            if (departments.Count() > 1 && room != null && room.MaxCapacity < totalStudents)
             {
                 violations.Add($"{course.Code}: Room {room.Name} too small for combined class ({totalStudents} students)");
             }
 
-            if (departments.Count() == 1 && room != null && room.Capacity < totalStudents)
+            if (departments.Count() == 1 && room != null && room.MaxCapacity < totalStudents)
             {
                 violations.Add($"{course.Code}: Department {deptList} combined class needs larger room");
             }
@@ -517,5 +514,131 @@ public class FlexibleScheduleConstraint : IConstraint
         return violations.Any()
             ? $"Flexible schedule violations: {string.Join(", ", violations)}"
             : "No flexible schedule violations";
+    }
+}
+
+public class RoomUtilizationConstraint : IConstraint
+{
+    private const double OPTIMAL_UTILIZATION_MIN = 0.7;
+    private const double OPTIMAL_UTILIZATION_MAX = 0.9;
+
+    public double EvaluatePenalty(Chromosome chromosome)
+    {
+        double totalPenalty = 0;
+        foreach (var gene in chromosome.Genes)
+        {
+            if (gene.Room != null && gene.Course.Mode != CourseMode.Virtual)
+            {
+                double utilization = (double)gene.Course.StudentCount / gene.Room.MaxCapacity;
+                
+                if (utilization < OPTIMAL_UTILIZATION_MIN)
+                {
+                    totalPenalty += (OPTIMAL_UTILIZATION_MIN - utilization) * 0.5;
+                }
+                else if (utilization > OPTIMAL_UTILIZATION_MAX)
+                {
+                    totalPenalty += (utilization - OPTIMAL_UTILIZATION_MAX) * 0.5;
+                }
+            }
+        }
+        return totalPenalty / chromosome.Genes.Count;
+    }
+
+    public string GetViolationMessage(Chromosome chromosome)
+    {
+        var violations = chromosome.Genes
+            .Where(g => g.Room != null && g.Course.Mode != CourseMode.Virtual)
+            .Where(g => {
+                double utilization = (double)g.Course.StudentCount / g.Room.MaxCapacity;
+                return utilization < OPTIMAL_UTILIZATION_MIN || utilization > OPTIMAL_UTILIZATION_MAX;
+            })
+            .Select(g => $"{g.Course.Code} in {g.Room.Name} ({g.Course.StudentCount}/{g.Room.MaxCapacity} = {(double)g.Course.StudentCount / g.Room.MaxCapacity:P0})");
+
+        return $"Room utilization outside optimal range: {string.Join(", ", violations)}";
+    }
+}
+
+public class PreferredTimeSlotConstraint : IConstraint
+{
+    public double EvaluatePenalty(Chromosome chromosome)
+    {
+        double totalPenalty = 0;
+        foreach (var gene in chromosome.Genes.Where(g => g.Course?.Preferences != null))
+        {
+            if (gene.Course.Preferences.PreferredTimeSlots.Any() && 
+                !gene.Course.Preferences.PreferredTimeSlots.ContainsKey(gene.TimeSlot))
+            {
+                totalPenalty += 0.3;
+            }
+        }
+        return totalPenalty / chromosome.Genes.Count;
+    }
+
+    public string GetViolationMessage(Chromosome chromosome)
+    {
+        var violations = chromosome.Genes
+            .Where(g => g.Course.Preferences.PreferredTimeSlots.Any() && 
+                       !g.Course.Preferences.PreferredTimeSlots.ContainsKey(g.TimeSlot))
+            .Select(g => $"{g.Course.Code} scheduled at {g.TimeSlot} instead of preferred slots");
+
+        return $"Courses not in preferred time slots: {string.Join(", ", violations)}";
+    }
+}
+
+public class ConsecutiveSessionsConstraint : IConstraint
+{
+    public double EvaluatePenalty(Chromosome chromosome)
+    {
+        var penalty = 0.0;
+        var courseGroups = chromosome.Genes
+            .GroupBy(g => g.Course.Code);
+
+        foreach (var group in courseGroups)
+        {
+            var sessions = group.OrderBy(g => g.TimeSlot.Day)
+                              .ThenBy(g => g.TimeSlot.StartTime)
+                              .ToList();
+
+            for (int i = 1; i < sessions.Count; i++)
+            {
+                if (sessions[i].TimeSlot.Day == sessions[i-1].TimeSlot.Day &&
+                    !AreSessionsConsecutive(sessions[i-1].TimeSlot, sessions[i].TimeSlot))
+                {
+                    penalty += 0.2;
+                }
+            }
+        }
+
+        return penalty / chromosome.Genes.Count;
+    }
+
+    private bool AreSessionsConsecutive(TimeSlot first, TimeSlot second)
+    {
+        return first.EndTime == second.StartTime;
+    }
+
+    public string GetViolationMessage(Chromosome chromosome)
+    {
+        var violations = new List<string>();
+        var courseGroups = chromosome.Genes
+            .GroupBy(g => g.Course.Code);
+
+        foreach (var group in courseGroups)
+        {
+            var sessions = group.OrderBy(g => g.TimeSlot.Day)
+                              .ThenBy(g => g.TimeSlot.StartTime)
+                              .ToList();
+
+            for (int i = 1; i < sessions.Count; i++)
+            {
+                if (sessions[i].TimeSlot.Day == sessions[i-1].TimeSlot.Day &&
+                    !AreSessionsConsecutive(sessions[i-1].TimeSlot, sessions[i].TimeSlot))
+                {
+                    violations.Add($"{group.Key} has non-consecutive sessions on {sessions[i].TimeSlot.Day}");
+                }
+            }
+        }
+
+        return string.Join(", ", violations);
     }
 }
